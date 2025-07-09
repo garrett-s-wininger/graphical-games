@@ -1,17 +1,22 @@
 #version 410 core
 
-out vec4 FragColor;
+// NOTE(garrett): The following color will be the rendered result to the user
+out vec4 fragmentColor;
 
 void main() {
-    // NOTE(garrett): The below lines clip our normally square points to a cirle to
-    // generate a dot
-    vec2 circularCoordinate = 2.0f * gl_PointCoord - 1.0;
+    // NOTE(garrett): We normally get [0, -1] from the coordinate, map this to [-1, 1],
+    // gl_PointCoord is only available with point primitives so we can't use this
+    // shader with other data types
+    vec2 coord = 2.0f * gl_PointCoord - 1.0;
 
-    if (dot(circularCoordinate, circularCoordinate) > 0.5) {
-        // TODO(garrett): This isn't necessarily a fragment shader problem but we'll want
-        // a form of anti-aliasing as the current format results in jagged edges
-        discard;
-    }
+    // NOTE(garrett): Using the vector length from the point center, step the alpha
+    // across the edge to provide for a smooth blend so our points render as smooth
+    // circles
+    float distance = length(coord);
+    float edge = 0.15;
+    float alpha = smoothstep(1.0f, 1.0f - edge, distance);
 
-    FragColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    // NOTE(garrett): The resulting alpha will only properly blend if we've enabled
+    // it externally via OpenGL's glEnable and glBlendFunc calls
+    fragmentColor = vec4(0.0f, 0.0f, 0.0f, alpha);
 }

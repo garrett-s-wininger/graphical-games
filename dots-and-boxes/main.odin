@@ -22,11 +22,16 @@ init_glfw :: proc() {
 
 	// TODO(garrett): Support window resizing, requires framebuffer callback
 	glfw.WindowHint(glfw.RESIZABLE, false)
+
+	// NOTE(garrett): The following sets us up to load a minimum version that is
+	// compatible with our target, in our case the last used one from Apple for
+	// compatibility purposes
 	glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, OPENGL_MAJOR_TARGET)
 	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, OPENGL_MINOR_TARGET)
 	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
 }
 
+@(require_results)
 create_glfw_window :: proc() -> glfw.WindowHandle {
 	window := glfw.CreateWindow(WINDOW_SIZE, WINDOW_SIZE, PROGRAM, nil, nil)
 
@@ -35,15 +40,28 @@ create_glfw_window :: proc() -> glfw.WindowHandle {
 		os.exit(1)
 	}
 
+	// NOTE(garrett): We need to explicitly make our newly created window the OpenGL rendering
+	// context - this app only uses one so we can set it immediately
 	glfw.MakeContextCurrent(window)
 	return window
 }
 
 init_opengl :: proc() {
+	// NOTE(garrett): This comes up different ways in different languages but ensures we have our
+	// OpenGL functions actually loaded and available
 	OpenGL.load_up_to(OPENGL_MAJOR_TARGET, OPENGL_MINOR_TARGET, glfw.gl_set_proc_address)
+
+	// NOTE(garrett): Sets the initial normalized device coordinates (NDC) to match the window,
+	// using white as our default background color
 	OpenGL.Viewport(0, 0, WINDOW_SIZE, WINDOW_SIZE)
 	OpenGL.ClearColor(1.0, 1.0, 1.0, 1.0)
+
+	// NOTE(garrett): This provides us with fragment coordinate data in our shader
 	OpenGL.Enable(OpenGL.PROGRAM_POINT_SIZE)
+
+	// NOTE(garrett): The following allow for alpha-blending to support transparency
+	OpenGL.Enable(OpenGL.BLEND);
+	OpenGL.BlendFunc(OpenGL.SRC_ALPHA, OpenGL.ONE_MINUS_SRC_ALPHA)
 }
 
 @(require_results)
@@ -123,6 +141,9 @@ compile_shader :: proc(type: u32, file: string) -> u32 {
 
 @(require_results)
 create_shader_program :: proc(vert_shader_file: string, frag_shader_file: string) -> u32 {
+	// NOTE(garrett): The shader objects for the vertex and fragment shader can be thought of
+	// intermediates that aren't necessary after the full shader program is rendered so we
+	// can safely have them deleted at the end of the function to free resources
 	vert_shader := compile_shader(OpenGL.VERTEX_SHADER, vert_shader_file)
 	defer OpenGL.DeleteShader(vert_shader)
 
@@ -160,6 +181,9 @@ prepare_point_buffer_vao :: proc() -> u32 {
 	OpenGL.BindVertexArray(vao)
 	defer OpenGL.BindVertexArray(0)
 
+	// TODO(garrett): We eventually want to dynamically create this slice depending on the desired
+	// number of rows and columns within the game - may need to also make this dynamic for proper
+	// scaling across different window sizes
 	verts := [?]f32{
 		0.5, 0.5,
 		0.5, -0.5,
