@@ -7,12 +7,45 @@ import "core:os"
 import "vendor:glfw"
 import "vendor:OpenGL"
 
+// NOTE(garrett): These constants for window sizing/configuration
+BASE_WINDOW_SIZE :: 256
+BORDER_SIZE_PX :: 64
+// TODO(garrett): We should have this as a parameter to the application
+// or as a controllable UI element, TBD
+BOX_COUNT :: 2
+NDC_DIFFERENCE :: NDC_START_OFFSET - (-NDC_START_OFFSET)
+NDC_START_OFFSET :: 1 - (2 * (f32(BORDER_SIZE_PX) / f32(WINDOW_SIZE)))
+POINT_COUNT :: (BOX_COUNT + 1) * (BOX_COUNT + 1)
+POINT_GAP_MULTIPLIER :: 1.0 / BOX_COUNT
+POINT_GAP :: POINT_GAP_MULTIPLIER * NDC_DIFFERENCE
+PROGRAM :: "Dots-and-Boxes"
+WINDOW_SIZE :: BASE_WINDOW_SIZE + (128 * (BOX_COUNT - 1))
+
+// NOTE(garrett): These constants control the maximum size of shader text
+// we'll compile as well as how large of a log we'll accept when outputting
+// compilation errors
 MAX_SHADER_LOG_SIZE :: 1024 * 4
 MAX_SHADER_SIZE :: 1024 * 64
+
+// NOTE(garrett): These constants to determine which version of OpenGL to
+// target for rendering
 OPENGL_MAJOR_TARGET :: 4
 OPENGL_MINOR_TARGET :: 1
-PROGRAM :: "Dots-and-Boxes"
-WINDOW_SIZE :: 256
+
+populate_point_verts :: proc(vert_storage: []f32) {
+	vert_idx := 0
+
+	for row := 0; row < BOX_COUNT + 1; row += 1 {
+		point_y := NDC_START_OFFSET - (f32(row) * POINT_GAP)
+
+		for column := 0; column < BOX_COUNT + 1; column += 1 {
+			point_x := -NDC_START_OFFSET + (f32(column) * POINT_GAP)
+			vert_storage[vert_idx] = point_x
+			vert_storage[vert_idx + 1] = point_y
+			vert_idx += 2
+		}
+	}
+}
 
 init_glfw :: proc() {
 	if !glfw.Init() {
@@ -174,22 +207,12 @@ create_shader_program :: proc(vert_shader_file: string, frag_shader_file: string
 }
 
 @(require_results)
-prepare_point_buffer_vao :: proc() -> u32 {
+prepare_point_buffer_vao :: proc(point_buffer: []f32) -> u32 {
 	vao : u32 = ---
 
 	OpenGL.GenVertexArrays(1, &vao)
 	OpenGL.BindVertexArray(vao)
 	defer OpenGL.BindVertexArray(0)
-
-	// TODO(garrett): We eventually want to dynamically create this slice depending on the desired
-	// number of rows and columns within the game - may need to also make this dynamic for proper
-	// scaling across different window sizes
-	verts := [?]f32{
-		0.5, 0.5,
-		0.5, -0.5,
-		-0.5, 0.5,
-		-0.5, -0.5
-	}
 
 	vbo: u32 = ---
 
@@ -197,25 +220,29 @@ prepare_point_buffer_vao :: proc() -> u32 {
 	OpenGL.BindBuffer(OpenGL.ARRAY_BUFFER, vbo)
 	defer OpenGL.BindBuffer(OpenGL.ARRAY_BUFFER, 0)
 
-	OpenGL.BufferData(OpenGL.ARRAY_BUFFER, size_of(verts), &verts, OpenGL.STATIC_DRAW)
+	OpenGL.BufferData(OpenGL.ARRAY_BUFFER, len(point_buffer) * size_of(f32), raw_data(point_buffer), OpenGL.STATIC_DRAW)
 	OpenGL.VertexAttribPointer(0, 2, OpenGL.FLOAT, false, 0, 0)
+
+	// NOTE(garrett): This has to match the layout in the shader that we use for points
 	OpenGL.EnableVertexAttribArray(0)
 
 	return vao
 }
 
-render :: proc(point_vao: u32, point_shader: u32) {
+render :: proc(point_vao: u32, point_shader: u32, points: []f32) {
 	OpenGL.Clear(OpenGL.COLOR_BUFFER_BIT)
 
 	OpenGL.UseProgram(point_shader)
 	OpenGL.BindVertexArray(point_vao)
 	defer OpenGL.BindVertexArray(0)
 
-	// TODO(garrett): Dynamically determine counts
-	OpenGL.DrawArrays(OpenGL.POINTS, 0, 4)
+	OpenGL.DrawArrays(OpenGL.POINTS, 0, i32(len(points) / 2))
 }
 
 main :: proc() {
+	verts := [POINT_COUNT * 2]f32{}
+	populate_point_verts(verts[:])
+
 	init_glfw()
 	defer glfw.Terminate()
 
@@ -223,7 +250,8 @@ main :: proc() {
 	defer glfw.DestroyWindow(window)
 
 	init_opengl()
-	point_vao := prepare_point_buffer_vao()
+
+	point_vao := prepare_point_buffer_vao(verts[:])
 	point_shader := create_shader_program(
 		"shaders/vertex.glsl",
 		"shaders/fragment.glsl"
@@ -238,7 +266,7 @@ main :: proc() {
 
 		// TODO(garrett): Add mouse data to affect rendering, possibly through
 		// a uniform so that we can highlight selections
-		render(point_vao, point_shader)
+		render(point_vao, point_shader, verts[:])
 
 		glfw.SwapBuffers(window)
 		glfw.PollEvents()
