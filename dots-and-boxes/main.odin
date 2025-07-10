@@ -18,6 +18,7 @@ NDC_START_OFFSET :: 1 - (2 * (f32(BORDER_SIZE_PX) / f32(WINDOW_SIZE)))
 POINT_COUNT :: (BOX_COUNT + 1) * (BOX_COUNT + 1)
 POINT_GAP_MULTIPLIER :: 1.0 / BOX_COUNT
 POINT_GAP :: POINT_GAP_MULTIPLIER * NDC_DIFFERENCE
+POINT_SIZE :: 25
 PROGRAM :: "Dots-and-Boxes"
 WINDOW_SIZE :: BASE_WINDOW_SIZE + (128 * (BOX_COUNT - 1))
 
@@ -74,23 +75,19 @@ create_glfw_window :: proc() -> glfw.WindowHandle {
 		os.exit(1)
 	}
 
-	// NOTE(garrett): We need to explicitly make our newly created window the OpenGL rendering
-	// context - this app only uses one so we can set it immediately
+	// NOTE(garrett): We need to explicitly make our newly created window the OpenGL
+	// rendering context - this app only uses one so we can set it immediately
 	glfw.MakeContextCurrent(window)
 	return window
 }
 
-init_opengl :: proc(window: glfw.WindowHandle) {
-	// NOTE(garrett): This comes up different ways in different languages but ensures we have our
-	// OpenGL functions actually loaded and available
+init_opengl :: proc(framebuffer_width, framebuffer_height: i32) {
+	// NOTE(garrett): This comes up different ways in different languages but
+	// ensures we have our OpenGL functions actually loaded and available
 	OpenGL.load_up_to(OPENGL_MAJOR_TARGET, OPENGL_MINOR_TARGET, glfw.gl_set_proc_address)
 
-	// NOTE(garrett): Sets the initial normalized device coordinates (NDC) to match the window,
-	// using white as our default background color
-	framebuffer_width, framebuffer_height := glfw.GetFramebufferSize(
-		window
-	)
-
+	// NOTE(garrett): Sets the initial normalized device coordinates (NDC)
+	// to match the window, using white as our default background color
 	OpenGL.Viewport(0, 0, framebuffer_width, framebuffer_height)
 	OpenGL.ClearColor(1.0, 1.0, 1.0, 1.0)
 
@@ -225,7 +222,13 @@ prepare_point_buffer_vao :: proc(points: []Point2D) -> u32 {
 	OpenGL.BindBuffer(OpenGL.ARRAY_BUFFER, vbo)
 	defer OpenGL.BindBuffer(OpenGL.ARRAY_BUFFER, 0)
 
-	OpenGL.BufferData(OpenGL.ARRAY_BUFFER, len(points) * size_of(Point2D), raw_data(points), OpenGL.STATIC_DRAW)
+	OpenGL.BufferData(
+		OpenGL.ARRAY_BUFFER,
+		len(points) * size_of(Point2D),
+		raw_data(points),
+		OpenGL.STATIC_DRAW
+	)
+
 	OpenGL.VertexAttribPointer(0, 2, OpenGL.FLOAT, false, 0, 0)
 
 	// NOTE(garrett): This has to match the layout in the shader that we use for points
@@ -234,14 +237,56 @@ prepare_point_buffer_vao :: proc(points: []Point2D) -> u32 {
 	return vao
 }
 
-render :: proc(point_vao: u32, point_shader: u32, points: []Point2D) {
+PointRenderData :: struct {
+	point_count: i32,
+	mouse_position_uniform: i32,
+	mouse_position: Point2D,
+	framebuffer_uniform: i32,
+	framebuffer_size: i32,
+	dpi_scale_uniform: i32,
+	dpi_scale: f32,
+	point_size_uniform: i32,
+	point_size: i32
+}
+
+render_points :: proc(point_vao: u32, point_shader: u32, render_data: PointRenderData) {
 	OpenGL.Clear(OpenGL.COLOR_BUFFER_BIT)
 
 	OpenGL.UseProgram(point_shader)
 	OpenGL.BindVertexArray(point_vao)
 	defer OpenGL.BindVertexArray(0)
 
-	OpenGL.DrawArrays(OpenGL.POINTS, 0, i32(len(points)))
+	OpenGL.Uniform1i(
+		render_data.point_size_uniform,
+		render_data.point_size
+	)
+
+	OpenGL.Uniform1i(
+		render_data.framebuffer_uniform,
+		render_data.framebuffer_size
+	)
+
+	OpenGL.Uniform1f(
+		render_data.dpi_scale_uniform,
+		render_data.dpi_scale
+	)
+
+	OpenGL.Uniform2f(
+		render_data.mouse_position_uniform,
+		render_data.mouse_position.x,
+		render_data.mouse_position.y
+	)
+
+	OpenGL.DrawArrays(OpenGL.POINTS, 0, render_data.point_count)
+}
+
+get_dpi_aware_mouse_position :: proc(window: glfw.WindowHandle, dpi_scale: f32) -> Point2D {
+	mouse_x, mouse_y := glfw.GetCursorPos(window)
+
+	return Point2D{
+		f32(mouse_x) * dpi_scale,
+		(WINDOW_SIZE - f32(mouse_y)) * dpi_scale
+	}
 }
 
 main :: proc() {
@@ -254,7 +299,11 @@ main :: proc() {
 	window := create_glfw_window()
 	defer glfw.DestroyWindow(window)
 
-	init_opengl(window)
+	framebuffer_width, framebuffer_height := glfw.GetFramebufferSize(
+		window
+	)
+
+	init_opengl(framebuffer_width, framebuffer_height)
 
 	point_vao := prepare_point_buffer_vao(verts[:])
 	point_shader := create_shader_program(
@@ -264,14 +313,41 @@ main :: proc() {
 
 	defer OpenGL.DeleteProgram(point_shader)
 
+	// NOTE(garrett): We need to query our linked program for where we should
+	// put our external data necessary for rendering, this will be loaded into the
+	// shader program prior to each render pass
+	framebuffer_uniform := OpenGL.GetUniformLocation(point_shader, "framebufferSize")
+	mouse_uniform := OpenGL.GetUniformLocation(point_shader, "mousePosition")
+	dpi_scale_uniform := OpenGL.GetUniformLocation(point_shader, "dpiScale")
+	point_size_uniform := OpenGL.GetUniformLocation(point_shader, "pointSize")
+
+	// NOTE(garrett): We need to determine the pixel scaling for high resolution
+	// displays, such as Retina on MacOS
+	scale_x := f32(framebuffer_width) / WINDOW_SIZE
+	scale_y := f32(framebuffer_height) / WINDOW_SIZE
+	dpi_scale := (scale_x + scale_y) / 2
+
 	for {
 		if (glfw.WindowShouldClose(window)) {
 			break
 		}
 
-		// TODO(garrett): Add mouse data to affect rendering, possibly through
-		// a uniform so that we can highlight selections
-		render(point_vao, point_shader, verts[:])
+		// TODO(garrett): There's likely much better ways to organize the rendering
+		// that we'll want to explore, especially as we move to lines and more
+		// interactivity
+		render_data := PointRenderData{
+			i32(len(verts)),
+			mouse_uniform,
+			get_dpi_aware_mouse_position(window, dpi_scale),
+			framebuffer_uniform,
+			framebuffer_width,
+			dpi_scale_uniform,
+			dpi_scale,
+			point_size_uniform,
+			POINT_SIZE
+		}
+
+		render_points(point_vao, point_shader, render_data)
 
 		glfw.SwapBuffers(window)
 		glfw.PollEvents()
