@@ -79,14 +79,18 @@ create_glfw_window :: proc() -> glfw.WindowHandle {
 	return window
 }
 
-init_opengl :: proc() {
+init_opengl :: proc(window: glfw.WindowHandle) {
 	// NOTE(garrett): This comes up different ways in different languages but ensures we have our
 	// OpenGL functions actually loaded and available
 	OpenGL.load_up_to(OPENGL_MAJOR_TARGET, OPENGL_MINOR_TARGET, glfw.gl_set_proc_address)
 
 	// NOTE(garrett): Sets the initial normalized device coordinates (NDC) to match the window,
 	// using white as our default background color
-	OpenGL.Viewport(0, 0, WINDOW_SIZE, WINDOW_SIZE)
+	framebuffer_width, framebuffer_height := glfw.GetFramebufferSize(
+		window
+	)
+
+	OpenGL.Viewport(0, 0, framebuffer_width, framebuffer_height)
 	OpenGL.ClearColor(1.0, 1.0, 1.0, 1.0)
 
 	// NOTE(garrett): This provides us with fragment coordinate data in our shader
@@ -249,7 +253,7 @@ main :: proc() {
 	window := create_glfw_window()
 	defer glfw.DestroyWindow(window)
 
-	init_opengl()
+	init_opengl(window)
 
 	point_vao := prepare_point_buffer_vao(verts[:])
 	point_shader := create_shader_program(
