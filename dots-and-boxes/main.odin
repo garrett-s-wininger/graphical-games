@@ -32,7 +32,9 @@ MAX_SHADER_SIZE :: 1024 * 64
 OPENGL_MAJOR_TARGET :: 4
 OPENGL_MINOR_TARGET :: 1
 
-populate_point_verts :: proc(vert_storage: []f32) {
+Point2D :: distinct [2]f32
+
+populate_point_verts :: proc(vert_storage: []Point2D) {
 	vert_idx := 0
 
 	for row := 0; row < BOX_COUNT + 1; row += 1 {
@@ -40,9 +42,8 @@ populate_point_verts :: proc(vert_storage: []f32) {
 
 		for column := 0; column < BOX_COUNT + 1; column += 1 {
 			point_x := -NDC_START_OFFSET + (f32(column) * POINT_GAP)
-			vert_storage[vert_idx] = point_x
-			vert_storage[vert_idx + 1] = point_y
-			vert_idx += 2
+			vert_storage[vert_idx] = Point2D{point_x, point_y}
+			vert_idx += 1
 		}
 	}
 }
@@ -211,7 +212,7 @@ create_shader_program :: proc(vert_shader_file: string, frag_shader_file: string
 }
 
 @(require_results)
-prepare_point_buffer_vao :: proc(point_buffer: []f32) -> u32 {
+prepare_point_buffer_vao :: proc(points: []Point2D) -> u32 {
 	vao : u32 = ---
 
 	OpenGL.GenVertexArrays(1, &vao)
@@ -224,7 +225,7 @@ prepare_point_buffer_vao :: proc(point_buffer: []f32) -> u32 {
 	OpenGL.BindBuffer(OpenGL.ARRAY_BUFFER, vbo)
 	defer OpenGL.BindBuffer(OpenGL.ARRAY_BUFFER, 0)
 
-	OpenGL.BufferData(OpenGL.ARRAY_BUFFER, len(point_buffer) * size_of(f32), raw_data(point_buffer), OpenGL.STATIC_DRAW)
+	OpenGL.BufferData(OpenGL.ARRAY_BUFFER, len(points) * size_of(Point2D), raw_data(points), OpenGL.STATIC_DRAW)
 	OpenGL.VertexAttribPointer(0, 2, OpenGL.FLOAT, false, 0, 0)
 
 	// NOTE(garrett): This has to match the layout in the shader that we use for points
@@ -233,18 +234,18 @@ prepare_point_buffer_vao :: proc(point_buffer: []f32) -> u32 {
 	return vao
 }
 
-render :: proc(point_vao: u32, point_shader: u32, points: []f32) {
+render :: proc(point_vao: u32, point_shader: u32, points: []Point2D) {
 	OpenGL.Clear(OpenGL.COLOR_BUFFER_BIT)
 
 	OpenGL.UseProgram(point_shader)
 	OpenGL.BindVertexArray(point_vao)
 	defer OpenGL.BindVertexArray(0)
 
-	OpenGL.DrawArrays(OpenGL.POINTS, 0, i32(len(points) / 2))
+	OpenGL.DrawArrays(OpenGL.POINTS, 0, i32(len(points)))
 }
 
 main :: proc() {
-	verts := [POINT_COUNT * 2]f32{}
+	verts := [POINT_COUNT]Point2D{}
 	populate_point_verts(verts[:])
 
 	init_glfw()
