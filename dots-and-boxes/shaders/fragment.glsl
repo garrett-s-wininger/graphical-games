@@ -13,7 +13,7 @@ in vec2 pointCenter;
 out vec4 fragmentColor;
 
 void main() {
-    // NOTE(garrett): We normally get [0, -1] from the coordinate, map this to [-1, 1],
+    // NOTE(garrett): We normally get [0, 1] from the coordinate, map this to [-1, 1],
     // gl_PointCoord is only available with point primitives so we can't use this
     // shader with other data types
     vec2 coord = 2.0f * gl_PointCoord - 1.0;
