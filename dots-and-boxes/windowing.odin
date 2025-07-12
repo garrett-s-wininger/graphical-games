@@ -14,17 +14,30 @@ GameWindow :: struct {
 	dpi_scale: f32
 }
 
+InputState :: struct {
+	lmb_pressed: bool
+}
+
+// NOTE(garrett): We'll keep track of our pressed state and give a snapshot of
+// our input state to client game loops for their tick event that they can use
+// for game logic
+lmb_pressed := false
+
 @(private="file")
 @(require_results)
-create_glfw_window :: proc(title: cstring, width: i32, height: i32) -> (glfw.WindowHandle, bool) {
+create_glfw_window :: proc(
+		title: cstring,
+		width: i32,
+		height: i32) -> (glfw.WindowHandle, bool) {
 	window := glfw.CreateWindow(width, height, title, nil, nil)
 
 	if window == nil {
 		return nil, false
 	}
 
-	// NOTE(garrett): We need to explicitly make our newly created window the OpenGL
-	// rendering context - this app only uses one so we can set it immediately
+	// NOTE(garrett): We need to explicitly make our newly created window the
+	// OpenGL rendering context - this app only uses one so we can set it
+	// immediately
 	glfw.MakeContextCurrent(window)
 	return window, true
 }
@@ -35,12 +48,15 @@ get_dpi_aware_mouse_position :: proc(window: GameWindow) -> Point2D {
 
 	return Point2D{
 		f32(mouse_x) * window.dpi_scale,
-		(WINDOW_SIZE - f32(mouse_y)) * window.dpi_scale
+		(f32(window.height) - f32(mouse_y)) * window.dpi_scale
 	}
 }
 
 @(require_results)
-create_application_window :: proc(title: cstring, width: i32, height: i32) -> (GameWindow, bool) {
+create_application_window :: proc(
+		title: cstring,
+		width: i32,
+		height: i32) -> (GameWindow, bool) {
 	if !glfw.Init() {
 		log.error("Windowing system initialization failure")
 		return GameWindow{}, false
@@ -81,14 +97,29 @@ create_application_window :: proc(title: cstring, width: i32, height: i32) -> (G
 	}, true
 }
 
-run_main_window_loop :: proc(window: GameWindow, on_tick: proc(GameWindow)) {
+run_main_window_loop :: proc(
+		window: GameWindow,
+		on_tick: proc(GameWindow, InputState)) {
+	glfw.SetMouseButtonCallback(
+		window.handle,
+		proc "c" (handle: glfw.WindowHandle, button, action, mods: i32) {
+			if button == glfw.MOUSE_BUTTON_LEFT && action == glfw.PRESS {
+				lmb_pressed = true
+			}
+		}
+	)
+
 	for {
 		if (glfw.WindowShouldClose(window.handle)) {
 			break
 		}
 
-		on_tick(window)
+		on_tick(
+			window,
+			InputState{lmb_pressed}
+		)
 
+		lmb_pressed = false
 		glfw.SwapBuffers(window.handle)
 		glfw.PollEvents()
 	}

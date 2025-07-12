@@ -45,15 +45,19 @@ populate_point_verts :: proc(vert_storage: []Point2D) {
 	}
 }
 
-on_tick :: proc(window: GameWindow) {
+on_tick :: proc(window: GameWindow, user_inputs: InputState) {
 	render_data := RenderInfo{
 		get_dpi_aware_mouse_position(window),
 		POINT_SIZE,
-		// NOTE(garrett): We could aldo do width - we have a square area so thi
-		// doesn't matter for the particular use case
+		// NOTE(garrett): We could also do width - we have a square area so this
+		// doesn't matter for our particular use case
 		window.framebuffer_height,
 		window.dpi_scale,
 		point_storage[:]
+	}
+
+	if user_inputs.lmb_pressed {
+		log.info("Pressed mouse button!")
 	}
 
 	render(point_renderer, render_data)
@@ -67,7 +71,12 @@ main :: proc() {
 	context.logger = logger
 
 	populate_point_verts(point_storage[:])
-	window, ok = create_application_window("Dots-and-Boxes", WINDOW_SIZE, WINDOW_SIZE)
+
+	window, ok = create_application_window(
+		"Dots-and-Boxes",
+		WINDOW_SIZE,
+		WINDOW_SIZE
+	)
 
 	if !ok {
 		log.fatal("Failed to initialize application windowing")
