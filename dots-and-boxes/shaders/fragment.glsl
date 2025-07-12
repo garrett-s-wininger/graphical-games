@@ -3,8 +3,8 @@
 // NOTE(garrett): External inputs to help ensure we properly handle screen
 // resolution, desired rendering size, and cursor proximity calculations
 uniform float dpiScale;
-uniform int pointSize;
 uniform vec2 mousePosition;
+uniform int pointSize;
 
 // NOTE(garrett): Center of the point being rendered, passed from vertex shader
 in vec2 pointCenter;
@@ -18,11 +18,10 @@ void main() {
     // shader with other data types
     vec2 coord = 2.0f * gl_PointCoord - 1.0;
 
-
     // NOTE(garrett): Using the vector length from the point center, step the alpha
     // across the edge to provide for a smooth blend so our points render as smooth
     // circles - gives us an alpha in the range of [0, 1] so we need to invert in
-    // out output as we want a higher alpha internally
+    // our output as we want a higher alpha internally
     float distanceFromCenter = length(coord);
     float edge = 0.15;
     float alpha = smoothstep(0.7f, 1.0f - edge, distanceFromCenter);
