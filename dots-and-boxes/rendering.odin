@@ -13,6 +13,24 @@ import "vendor:opengl"
 MAX_SHADER_LOG_SIZE :: 1024 * 4
 MAX_SHADER_SIZE :: 1024 * 64
 
+PointRenderer :: struct {
+	vao: u32,
+	vbo: u32,
+	shader_program: u32,
+	dpi_scale_uniform: i32,
+	framebuffer_uniform: i32,
+	mouse_position_uniform: i32,
+	point_size_uniform: i32,
+}
+
+RenderInfo :: struct {
+	mouse_position: Point2D,
+	point_size: i32,
+	framebuffer_size: i32,
+	dpi_scale: f32,
+	points: []Point2D,
+}
+
 @(private="file")
 @(require_results)
 compile_shader :: proc(type: u32, file: string) -> (u32, bool) {
@@ -158,24 +176,6 @@ prepare_point_buffers :: proc() -> (u32, u32) {
 	OpenGL.VertexAttribPointer(0, 2, OpenGL.FLOAT, false, 0, 0)
 
 	return vao, vbo
-}
-
-PointRenderer :: struct {
-	vao: u32,
-	vbo: u32,
-	shader_program: u32,
-	dpi_scale_uniform: i32,
-	framebuffer_uniform: i32,
-	mouse_position_uniform: i32,
-	point_size_uniform: i32,
-}
-
-RenderInfo :: struct {
-	mouse_position: Point2D,
-	point_size: i32,
-	framebuffer_size: i32,
-	dpi_scale: f32,
-	points: []Point2D,
 }
 
 @(private="file")

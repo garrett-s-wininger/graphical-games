@@ -21,7 +21,8 @@ OPENGL_MINOR_TARGET :: 1
 
 Point2D :: distinct [2]f32
 
-// NOTE(garrett): These are the global 
+// NOTE(garrett): These are the global pieces we need to access per-frame for
+// proper operation
 point_renderer: PointRenderer
 point_storage := [POINT_COUNT]Point2D{}
 
@@ -74,7 +75,11 @@ main :: proc() {
 	}
 
 	defer teardown_windowing_system(window)
-	point_renderer, ok = initialize_rendering_backend(window.framebuffer_width, window.framebuffer_height)
+
+	point_renderer, ok = initialize_rendering_backend(
+		window.framebuffer_width,
+		window.framebuffer_height
+	)
 
 	if !ok {
 		log.fatal("Failed to initialize rendering backend")
