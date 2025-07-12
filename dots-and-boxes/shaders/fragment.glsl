@@ -18,22 +18,28 @@ void main() {
     // shader with other data types
     vec2 coord = 2.0f * gl_PointCoord - 1.0;
 
+
     // NOTE(garrett): Using the vector length from the point center, step the alpha
     // across the edge to provide for a smooth blend so our points render as smooth
-    // circles
+    // circles - gives us an alpha in the range of [0, 1] so we need to invert in
+    // out output as we want a higher alpha internally
     float distanceFromCenter = length(coord);
     float edge = 0.15;
-    float alpha = smoothstep(1.0f, 1.0f - edge, distanceFromCenter);
+    float alpha = smoothstep(0.7f, 1.0f - edge, distanceFromCenter);
 
+    // NOTE(garrett): Start with an initial color of black, and apply pixel scaling
+    // to calculate the actual radius that a point should render to
     vec3 color = vec3(0.0f, 0.0f, 0.0f);
+    float scaledPointRadius = (pointSize * dpiScale) / 2.0f;
 
-    // TODO(garrett): We'll want to adjust this radius to meet our cutoff
-    // and adjust the effect to our liking
-    if (distance(mousePosition, pointCenter) < (pointSize * dpiScale)) {
-        color = vec3(1.0f, 0.0f, 0.0f);
+    // NOTE(garrett): To get our highlight effect, check if our provided mouse
+    // position within the area that the point should take up and then change
+    // the color of the dot accordingly (we use a dark-ish grey here)
+    if (distance(mousePosition, pointCenter) <= scaledPointRadius) {
+        color = vec3(0.3f, 0.3f, 0.3f);
     }
 
     // NOTE(garrett): The resulting alpha will only properly blend if we've enabled
     // it externally via OpenGL's glEnable and glBlendFunc calls
-    fragmentColor = vec4(color, alpha);
+    fragmentColor = vec4(color, 1 - alpha);
 }

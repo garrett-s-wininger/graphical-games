@@ -3,8 +3,8 @@
 // NOTE(garrett): The following are external inputs to ensure we
 // can properly provide display independent renders as well as
 // provide data to trigger effects on points
-uniform float dpiScale;
 uniform int framebufferSize;
+uniform float dpiScale;
 uniform int pointSize;
 
 // NOTE(garrett): Point verticies provided by our VAO, VBO combo
