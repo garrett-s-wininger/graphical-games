@@ -45,9 +45,56 @@ populate_point_verts :: proc(vert_storage: []Point2D) {
 	}
 }
 
+is_point_clicked :: proc(
+		window: GameWindow,
+		mouse_position: Point2D,
+		points: []Point2D) -> bool {
+	// NOTE(garrett): Our position is initially between [0, FB Width/Height],
+	// we map this to [0, 1], and then convert to [-1, 1] so we use the same
+	// coordinate system as our point verticies
+	mouse_ndc := Point2D{
+		(mouse_position.x / f32(window.framebuffer_width) * 2.0) - 1.0,
+		(mouse_position.y / f32(window.framebuffer_height) * 2.0) - 1.0
+	}
+
+	// NOTE(garrett): The point size is in pixels before scaling occurs -
+	// we need to scale up the size and then cut in half due to it
+	// being the side of a square area, rather than radius of a circle -
+	// NOTE(garrett): The 1/2 FB Width/Height division here ensures we're
+	// properly mapped into an NDC distance
+	collision_distance_ndc :=
+		((POINT_SIZE * window.dpi_scale) / 2.0) / (f32(window.framebuffer_width) / 2.0)
+
+	// NOTE(garrett): Take the square here as it saves the square root calculaton
+	// when comparing against the vertex distance
+	collision_distance_squared := collision_distance_ndc * collision_distance_ndc
+
+	// TODO(garrett): We're doing a naive check of all points because the amount is
+	// so small but realistically, knowing the NDC quadrant allows us to discard a
+	// significant number of point checks on larger boards
+	for vert in points {
+		distance_vector := mouse_ndc - vert
+
+		// NOTE(garrett): Though it's logical to compare square roots, it's
+		// pretty expensive to compute so we leave it as-is for our comparison
+		// as the math works out the same so long as both sides are squared
+		distance_squared :=
+			(distance_vector.x * distance_vector.x) +
+			(distance_vector.y * distance_vector.y)
+
+		if collision_distance_squared >= distance_squared {
+			return true
+		}
+	}
+
+	return false
+}
+
 on_tick :: proc(window: GameWindow, user_inputs: InputState) {
+	mouse_position := get_dpi_aware_mouse_position(window)
+
 	render_data := RenderInfo{
-		get_dpi_aware_mouse_position(window),
+		mouse_position,
 		POINT_SIZE,
 		// NOTE(garrett): We could also do width - we have a square area so this
 		// doesn't matter for our particular use case
@@ -56,8 +103,8 @@ on_tick :: proc(window: GameWindow, user_inputs: InputState) {
 		point_storage[:]
 	}
 
-	if user_inputs.lmb_pressed {
-		log.info("Pressed mouse button!")
+	if user_inputs.lmb_pressed && is_point_clicked(window, mouse_position, point_storage[:]) {
+		log.info("HIT!")
 	}
 
 	render(point_renderer, render_data)
