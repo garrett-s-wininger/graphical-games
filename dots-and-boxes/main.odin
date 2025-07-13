@@ -1,17 +1,17 @@
 package main
 
+import "base:runtime"
+import "core:container/small_array"
+import "core:fmt"
 import "core:log"
 import "core:os"
+import "core:strconv"
 
 // NOTE(garrett): These constants for window sizing/configuration
 BASE_WINDOW_SIZE :: 256
 BORDER_SIZE_PX :: 64
-WINDOW_SIZE :: BASE_WINDOW_SIZE + (128 * (BOX_COUNT - 1))
-
-// TODO(garrett): We should have this as a parameter to the application
-// or as a controllable UI element, TBD
-BOX_COUNT :: 2
-POINT_COUNT :: (BOX_COUNT + 1) * (BOX_COUNT + 1)
+MAX_POINT_COUNT :: 5
+MAX_POINT_STORAGE :: (MAX_POINT_COUNT + 1) * (MAX_POINT_COUNT + 1)
 POINT_SIZE :: 25
 
 // NOTE(garrett): These constants to determine which version of OpenGL to
@@ -24,23 +24,19 @@ Point2D :: distinct [2]f32
 // NOTE(garrett): These are the global pieces we need to access per-frame for
 // proper operation
 point_renderer: PointRenderer
-point_storage := [POINT_COUNT]Point2D{}
+point_storage: small_array.Small_Array(MAX_POINT_STORAGE, Point2D)
 
-populate_point_verts :: proc(vert_storage: []Point2D) {
-	NDC_DIFFERENCE :: NDC_START_OFFSET - (-NDC_START_OFFSET)
-	NDC_START_OFFSET :: 1 - (2 * (f32(BORDER_SIZE_PX) / f32(WINDOW_SIZE)))
-	POINT_GAP_MULTIPLIER :: 1.0 / BOX_COUNT
-	POINT_GAP :: POINT_GAP_MULTIPLIER * NDC_DIFFERENCE
+populate_point_verts :: proc(boxes_per_side, window_size: int) {
+	ndc_start_offset := 1 - (2 * (f32(BORDER_SIZE_PX) / f32(window_size)))
+	point_gap_multiplier := 1.0 / f32(boxes_per_side)
+	point_gap := point_gap_multiplier * 2 * ndc_start_offset
 
-	vert_idx := 0
+	for row := 0; row < boxes_per_side + 1; row += 1 {
+		point_y := ndc_start_offset - (f32(row) * point_gap)
 
-	for row := 0; row < BOX_COUNT + 1; row += 1 {
-		point_y := NDC_START_OFFSET - (f32(row) * POINT_GAP)
-
-		for column := 0; column < BOX_COUNT + 1; column += 1 {
-			point_x := -NDC_START_OFFSET + (f32(column) * POINT_GAP)
-			vert_storage[vert_idx] = Point2D{point_x, point_y}
-			vert_idx += 1
+		for column := 0; column < boxes_per_side + 1; column += 1 {
+			point_x := -ndc_start_offset + (f32(column) * point_gap)
+			small_array.push_back(&point_storage, Point2D{point_x, point_y})
 		}
 	}
 }
@@ -92,6 +88,7 @@ is_point_clicked :: proc(
 
 on_tick :: proc(window: GameWindow, user_inputs: InputState) {
 	mouse_position := get_dpi_aware_mouse_position(window)
+	point_vertex_data := small_array.slice(&point_storage)
 
 	render_data := RenderInfo{
 		mouse_position,
@@ -100,29 +97,77 @@ on_tick :: proc(window: GameWindow, user_inputs: InputState) {
 		// doesn't matter for our particular use case
 		window.framebuffer_height,
 		window.dpi_scale,
-		point_storage[:]
+		point_vertex_data
 	}
 
-	if user_inputs.lmb_pressed && is_point_clicked(window, mouse_position, point_storage[:]) {
+	if user_inputs.lmb_pressed && is_point_clicked(window, mouse_position, point_vertex_data) {
 		log.info("HIT!")
 	}
 
 	render(point_renderer, render_data)
 }
 
+print_usage :: proc() {
+	fmt.eprintln("Usage: dots-and-boxes")
+	fmt.eprintln("       dots-and-boxes -s [1,5]")
+}
+
+parse_program_args :: proc(program_args: []cstring) -> (int, bool) {
+	arg_count := len(program_args)
+
+	if arg_count != 1 && arg_count != 3 {
+		print_usage()
+		os.exit(1)
+	}
+
+	boxes_per_side := 2
+	user_provided_sizing : Maybe(string) = nil
+
+	if arg_count == 3 {
+		if program_args[1] != "-s" {
+			return 0, false
+		}
+
+		user_provided_sizing = string(program_args[2])
+	}
+
+	sizing, ok := user_provided_sizing.?
+
+	if ok {
+		box_sizing_request := strconv.atoi(sizing)
+
+		if box_sizing_request <= 0 || box_sizing_request > MAX_POINT_COUNT {
+			return 0, false
+		}
+
+		boxes_per_side = box_sizing_request
+	}
+
+	return boxes_per_side, true
+}
+
 main :: proc() {
+	boxes_per_side: int
 	ok: bool
 	window: GameWindow
+
+	boxes_per_side, ok = parse_program_args(runtime.args__)
+
+	if !ok {
+		print_usage()
+		os.exit(1)
+	}
 
 	logger := log.create_console_logger()
 	context.logger = logger
 
-	populate_point_verts(point_storage[:])
+	window_size := BASE_WINDOW_SIZE + (128 * (boxes_per_side - 1))
+	populate_point_verts(boxes_per_side, window_size)
 
 	window, ok = create_application_window(
 		"Dots-and-Boxes",
-		WINDOW_SIZE,
-		WINDOW_SIZE
+		window_size,
+		window_size
 	)
 
 	if !ok {

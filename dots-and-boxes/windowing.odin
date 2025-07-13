@@ -6,8 +6,8 @@ import "vendor:glfw"
 
 GameWindow :: struct {
 	handle: glfw.WindowHandle,
-	width: i32,
-	height: i32,
+	width: int,
+	height: int,
 	framebuffer_width: i32,
 	framebuffer_height: i32,
 	dpi_scale: f32
@@ -26,9 +26,9 @@ lmb_pressed := false
 @(require_results)
 create_glfw_window :: proc(
 		title: cstring,
-		width: i32,
-		height: i32) -> (glfw.WindowHandle, bool) {
-	window := glfw.CreateWindow(width, height, title, nil, nil)
+		width: int,
+		height: int) -> (glfw.WindowHandle, bool) {
+	window := glfw.CreateWindow(i32(width), i32(height), title, nil, nil)
 
 	if window == nil {
 		return nil, false
@@ -54,8 +54,8 @@ get_dpi_aware_mouse_position :: proc(window: GameWindow) -> Point2D {
 @(require_results)
 create_application_window :: proc(
 		title: cstring,
-		width: i32,
-		height: i32) -> (GameWindow, bool) {
+		width: int,
+		height: int) -> (GameWindow, bool) {
 	if !glfw.Init() {
 		log.error("Windowing system initialization failure")
 		return GameWindow{}, false
