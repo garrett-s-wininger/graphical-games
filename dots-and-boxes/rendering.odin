@@ -100,6 +100,9 @@ compile_shader :: proc(type: u32, file: string) -> (u32, bool) {
 			raw_data(info_log[:])
 		)
 
+		// FIXME(garrett): This typically ends in a newline character which messes
+		// up the context logging output - use the OpenGL primitives to test compile
+		// log size and truncate accordingly
 		failure_message := cstring(&info_log[0])
 		log.error(failure_message)
 		return 0, false

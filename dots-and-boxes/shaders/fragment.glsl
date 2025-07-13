@@ -37,11 +37,11 @@ void main() {
     // NOTE(garrett): To get our highlight effect, check if our provided mouse
     // position within the area that the point should take up and then change
     // the color of the dot accordingly (we use a dark-ish grey here)
-    if (distance(mousePosition, pointCenter) <= scaledPointRadius) {
-        // TODO(garrett): This should simply be adjusting to a lighter color from
-        // what's defined and not necessarily this Grey value
-        color = vec3(0.3f, 0.3f, 0.3f);
-    }
+    float mouseDistance = distance(mousePosition, pointCenter);
+    float hoverDiscoloration = 0.3;
+    float distanceValue = 1 - step(scaledPointRadius, mouseDistance) - hoverDiscoloration;
+
+    color = vec3(distanceValue, distanceValue, distanceValue) + desiredColor;
 
     // NOTE(garrett): The resulting alpha will only properly blend if we've enabled
     // it externally via OpenGL's glEnable and glBlendFunc calls
