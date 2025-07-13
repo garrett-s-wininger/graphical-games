@@ -15,7 +15,7 @@ MAX_SHADER_SIZE :: 1024 * 64
 
 PointRenderer :: struct {
 	vao: u32,
-	vbo: u32,
+	vbos: [2]u32,
 	shader_program: u32,
 	dpi_scale_uniform: i32,
 	framebuffer_uniform: i32,
@@ -28,7 +28,8 @@ RenderInfo :: struct {
 	point_size: i32,
 	framebuffer_size: i32,
 	dpi_scale: f32,
-	points: []Point2D,
+	point_count: i32,
+	colors: []Color
 }
 
 @(private="file")
@@ -160,22 +161,37 @@ create_shader_program :: proc(vert_shader_file: string, frag_shader_file: string
 
 @(private="file")
 @(require_results)
-prepare_point_buffers :: proc() -> (u32, u32) {
+prepare_point_buffers :: proc(verticies: []Point2D) -> (u32, [2]u32) {
 	vao : u32 = ---
 
 	OpenGL.GenVertexArrays(1, &vao)
 	OpenGL.BindVertexArray(vao)
 	defer OpenGL.BindVertexArray(0)
 
-	vbo: u32 = ---
+	vbos := [2]u32{}
 
-	OpenGL.GenBuffers(1, &vbo)
-	OpenGL.BindBuffer(OpenGL.ARRAY_BUFFER, vbo)
+	OpenGL.GenBuffers(2, raw_data(vbos[:]))
+	OpenGL.BindBuffer(OpenGL.ARRAY_BUFFER, vbos[0])
 	defer OpenGL.BindBuffer(OpenGL.ARRAY_BUFFER, 0)
+
+	// NOTE(garrett): Our first attribute will be the actual vertex data -
+	// this is unchanging over the course of the program so we can load it
+	// only once
+	OpenGL.BufferData(
+		OpenGL.ARRAY_BUFFER,
+		len(verticies) * size_of(Point2D),
+		raw_data(verticies),
+		OpenGL.STATIC_DRAW
+	)
 
 	OpenGL.VertexAttribPointer(0, 2, OpenGL.FLOAT, false, 0, 0)
 
-	return vao, vbo
+	// NOTE(garrett): Our second attribute is going to the per-point
+	// coloring so that we can adjust it per-player
+	OpenGL.BindBuffer(OpenGL.ARRAY_BUFFER, vbos[1])
+	OpenGL.VertexAttribPointer(1, 3, OpenGL.FLOAT, false, 0, 0)
+
+	return vao, vbos
 }
 
 @(private="file")
@@ -207,30 +223,32 @@ render_points :: proc(renderer: PointRenderer, data: RenderInfo) {
 		data.mouse_position.y
 	)
 
-	// NOTE(garrett): As we may have changing data, bind our
-	// vertex data and send it over to the GPU
-	OpenGL.BindBuffer(OpenGL.ARRAY_BUFFER, renderer.vbo);
-	defer OpenGL.BindBuffer(OpenGL.ARRAY_BUFFER, 0);
-
-	OpenGL.BufferData(
-		OpenGL.ARRAY_BUFFER,
-		len(data.points) * size_of(Point2D),
-		raw_data(data.points),
-		OpenGL.STATIC_DRAW
-	)
-
 	// NOTE(garrett): The vertex array is what we actually need loaded
 	// so ensure it's activated
 	OpenGL.BindVertexArray(renderer.vao)
 	defer OpenGL.BindVertexArray(0)
 
+	// NOTE(garrett): Since color data is changing throughout the program
+	// we need to upload a new set to the GPU
+	OpenGL.BindBuffer(OpenGL.ARRAY_BUFFER, renderer.vbos[1])
+	defer OpenGL.BindBuffer(OpenGL.ARRAY_BUFFER, 0)
+
+	OpenGL.BufferData(
+		OpenGL.ARRAY_BUFFER,
+		len(data.colors) * size_of(Color),
+		raw_data(data.colors),
+		OpenGL.STATIC_DRAW
+	)
+
 	// NOTE(garrett): For our actual rendering, we first need to enable
 	// the attributes we intend to use whose numbers are defined in our
 	// shader text
 	OpenGL.EnableVertexAttribArray(0)
+	OpenGL.EnableVertexAttribArray(1)
 	defer OpenGL.DisableVertexAttribArray(0)
+	defer OpenGL.DisableVertexAttribArray(1)
 
-	OpenGL.DrawArrays(OpenGL.POINTS, 0, i32(len(data.points)))
+	OpenGL.DrawArrays(OpenGL.POINTS, 0, data.point_count)
 }
 
 render :: proc(renderer: PointRenderer, data: RenderInfo) {
@@ -241,7 +259,7 @@ render :: proc(renderer: PointRenderer, data: RenderInfo) {
 	render_points(renderer, data)
 }
 
-initialize_rendering_backend :: proc(framebuffer_width, framebuffer_height: i32) -> (PointRenderer, bool) {
+initialize_rendering_backend :: proc(framebuffer_width, framebuffer_height: i32, point_verticies: []Point2D) -> (PointRenderer, bool) {
     // NOTE(garrett): This comes up different ways in different languages but
     // ensures we have our OpenGL functions actually loaded and available
     OpenGL.load_up_to(OPENGL_MAJOR_TARGET, OPENGL_MINOR_TARGET, glfw.gl_set_proc_address)
@@ -276,11 +294,11 @@ initialize_rendering_backend :: proc(framebuffer_width, framebuffer_height: i32)
 	mouse_uniform := OpenGL.GetUniformLocation(point_shader, "mousePosition")
 	point_size_uniform := OpenGL.GetUniformLocation(point_shader, "pointSize")
 
-	point_vao, point_vbo := prepare_point_buffers()
+	point_vao, point_vbos := prepare_point_buffers(point_verticies)
 
 	return PointRenderer{
 		point_vao,
-		point_vbo,
+		point_vbos,
 		point_shader,
 		dpi_scale_uniform,
 		framebuffer_uniform,

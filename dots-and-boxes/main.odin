@@ -20,11 +20,13 @@ OPENGL_MAJOR_TARGET :: 4
 OPENGL_MINOR_TARGET :: 1
 
 Point2D :: distinct [2]f32
+Color :: distinct [3]f32
 
 // NOTE(garrett): These are the global pieces we need to access per-frame for
 // proper operation
 point_renderer: PointRenderer
 point_storage: small_array.Small_Array(MAX_POINT_STORAGE, Point2D)
+point_color_storage: small_array.Small_Array(MAX_POINT_STORAGE, Color)
 
 populate_point_verts :: proc(boxes_per_side, window_size: int) {
 	ndc_start_offset := 1 - (2 * (f32(BORDER_SIZE_PX) / f32(window_size)))
@@ -37,6 +39,7 @@ populate_point_verts :: proc(boxes_per_side, window_size: int) {
 		for column := 0; column < boxes_per_side + 1; column += 1 {
 			point_x := -ndc_start_offset + (f32(column) * point_gap)
 			small_array.push_back(&point_storage, Point2D{point_x, point_y})
+			small_array.push_back(&point_color_storage, Color{0.0, 0.0, 0.0})
 		}
 	}
 }
@@ -44,7 +47,7 @@ populate_point_verts :: proc(boxes_per_side, window_size: int) {
 is_point_clicked :: proc(
 		window: GameWindow,
 		mouse_position: Point2D,
-		points: []Point2D) -> bool {
+		points: []Point2D) -> (int, bool) {
 	// NOTE(garrett): Our position is initially between [0, FB Width/Height],
 	// we map this to [0, 1], and then convert to [-1, 1] so we use the same
 	// coordinate system as our point verticies
@@ -65,6 +68,8 @@ is_point_clicked :: proc(
 	// when comparing against the vertex distance
 	collision_distance_squared := collision_distance_ndc * collision_distance_ndc
 
+	check_idx := 0
+
 	// TODO(garrett): We're doing a naive check of all points because the amount is
 	// so small but realistically, knowing the NDC quadrant allows us to discard a
 	// significant number of point checks on larger boards
@@ -79,16 +84,19 @@ is_point_clicked :: proc(
 			(distance_vector.y * distance_vector.y)
 
 		if collision_distance_squared >= distance_squared {
-			return true
+			return check_idx, true
 		}
+
+		check_idx += 1
 	}
 
-	return false
+	return 0, false
 }
 
 on_tick :: proc(window: GameWindow, user_inputs: InputState) {
 	mouse_position := get_dpi_aware_mouse_position(window)
 	point_vertex_data := small_array.slice(&point_storage)
+	point_color_data := small_array.slice(&point_color_storage)
 
 	render_data := RenderInfo{
 		mouse_position,
@@ -97,11 +105,17 @@ on_tick :: proc(window: GameWindow, user_inputs: InputState) {
 		// doesn't matter for our particular use case
 		window.framebuffer_height,
 		window.dpi_scale,
-		point_vertex_data
+		i32(len(point_vertex_data)),
+		point_color_data
 	}
 
-	if user_inputs.lmb_pressed && is_point_clicked(window, mouse_position, point_vertex_data) {
-		log.info("HIT!")
+	if user_inputs.lmb_pressed {
+		point_idx, is_clicked := is_point_clicked(window, mouse_position, point_vertex_data)
+
+		if is_clicked {
+			// TODO(garrett): Reset colors after clicking out of selected point
+			small_array.set(&point_color_storage, point_idx, Color{1.0, 0.0, 0.0})
+		}
 	}
 
 	render(point_renderer, render_data)
@@ -179,7 +193,8 @@ main :: proc() {
 
 	point_renderer, ok = initialize_rendering_backend(
 		window.framebuffer_width,
-		window.framebuffer_height
+		window.framebuffer_height,
+		small_array.slice(&point_storage)
 	)
 
 	if !ok {

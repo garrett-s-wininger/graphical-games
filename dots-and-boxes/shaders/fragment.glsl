@@ -9,6 +9,9 @@ uniform int pointSize;
 // NOTE(garrett): Center of the point being rendered, passed from vertex shader
 in vec2 pointCenter;
 
+// NOTE(garrett): Passed from the vertex shader, determined by game state
+in vec3 desiredColor;
+
 // NOTE(garrett): The following color will be the result rendered
 out vec4 fragmentColor;
 
@@ -28,13 +31,15 @@ void main() {
 
     // NOTE(garrett): Start with an initial color of black, and apply pixel scaling
     // to calculate the actual radius that a point should render to
-    vec3 color = vec3(0.0f, 0.0f, 0.0f);
+    vec3 color = desiredColor;
     float scaledPointRadius = (pointSize * dpiScale) / 2.0f;
 
     // NOTE(garrett): To get our highlight effect, check if our provided mouse
     // position within the area that the point should take up and then change
     // the color of the dot accordingly (we use a dark-ish grey here)
     if (distance(mousePosition, pointCenter) <= scaledPointRadius) {
+        // TODO(garrett): This should simply be adjusting to a lighter color from
+        // what's defined and not necessarily this Grey value
         color = vec3(0.3f, 0.3f, 0.3f);
     }
 
