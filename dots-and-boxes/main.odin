@@ -19,11 +19,18 @@ POINT_SIZE :: 25
 OPENGL_MAJOR_TARGET :: 4
 OPENGL_MINOR_TARGET :: 1
 
+// NOTE(garrett): These type definitions are meant to hold the actual
+// types that we'll use within our game
 Point2D :: distinct [2]f32
 Color :: distinct [3]f32
 
+// NOTE(garrett): Theming
+PLAYER1_COLOR :: Color{1.0, 0.0, 0.0}
+UNSELECTED_COLOR :: Color{0.0, 0.0, 0.0}
+
 // NOTE(garrett): These are the global pieces we need to access per-frame for
 // proper operation
+line_start_idx: Maybe(int) = nil
 point_renderer: PointRenderer
 point_storage: small_array.Small_Array(MAX_POINT_STORAGE, Point2D)
 point_color_storage: small_array.Small_Array(MAX_POINT_STORAGE, Color)
@@ -39,7 +46,7 @@ populate_point_verts :: proc(boxes_per_side, window_size: int) {
 		for column := 0; column < boxes_per_side + 1; column += 1 {
 			point_x := -ndc_start_offset + (f32(column) * point_gap)
 			small_array.push_back(&point_storage, Point2D{point_x, point_y})
-			small_array.push_back(&point_color_storage, Color{0.0, 0.0, 0.0})
+			small_array.push_back(&point_color_storage, UNSELECTED_COLOR)
 		}
 	}
 }
@@ -113,8 +120,27 @@ on_tick :: proc(window: GameWindow, user_inputs: InputState) {
 		point_idx, is_clicked := is_point_clicked(window, mouse_position, point_vertex_data)
 
 		if is_clicked {
-			// TODO(garrett): Reset colors after clicking out of selected point
-			small_array.set(&point_color_storage, point_idx, Color{1.0, 0.0, 0.0})
+			selected_idx, is_selected := line_start_idx.?
+
+			if !is_selected {
+				// NOTE(garrett): In this case, we don't have any selections, track the
+				// start of our line
+				// TODO(garrett): Validate that point can have new lines created
+				small_array.set(&point_color_storage, point_idx, PLAYER1_COLOR)
+				line_start_idx = point_idx
+			} else {
+				if selected_idx == point_idx {
+					// NOTE(garrett): We've selected the start of our line again, toggle
+					// off our selection
+					small_array.set(&point_color_storage, point_idx, UNSELECTED_COLOR)
+					line_start_idx = nil
+				} else {
+					// TODO(garrett): Validate points are adjacent
+					// TODO(garrett): Handle line creation between two points
+					// TODO(garrett): Switch players
+					// TODO(garrett): Box creation
+				}
+			}
 		}
 	}
 
