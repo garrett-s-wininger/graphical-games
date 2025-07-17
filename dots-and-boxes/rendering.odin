@@ -100,6 +100,16 @@ compile_shader :: proc(type: u32, file: string) -> (u32, bool) {
 			raw_data(info_log[:])
 		)
 
+		for char, idx in info_log {
+			if char == 0 && idx > 1 {
+				if info_log[idx-1] == '\n' {
+					info_log[idx-1] = 0
+				}
+
+				break
+			}
+		}
+
 		// FIXME(garrett): This typically ends in a newline character which messes
 		// up the context logging output - use the OpenGL primitives to test compile
 		// log size and truncate accordingly
