@@ -39,7 +39,7 @@ void main() {
     // the color of the dot accordingly (we use a dark-ish grey here)
     float mouseDistance = distance(mousePosition, pointCenter);
     float hoverDiscoloration = 0.3;
-    float distanceValue = 1 - step(scaledPointRadius, mouseDistance) - hoverDiscoloration
+    float distanceValue = 1 - step(scaledPointRadius, mouseDistance) - hoverDiscoloration;
 
     color = vec3(distanceValue, distanceValue, distanceValue) + desiredColor;
 
